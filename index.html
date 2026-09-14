@@ -232,15 +232,20 @@
                             const results = await ortSession.run(feeds);
                             const output = results[ortSession.outputNames[0]].data;
 
-                            // ВЫВОДИМ СЫРЫЕ ДАННЫЕ В КОНСОЛЬ ДЛЯ ДИАГНОСТИКИ
                             console.log("🔍 Сырые логиты модели по классам:", Array.from(output));
 
-                            // Softmax / Argmax для поиска класса
+                            // Точный расчет Softmax (как в PyTorch) для получения вероятностей
+                            const maxLogit = Math.max(...output);
+                            const exps = Array.from(output).map(val => Math.exp(val - maxLogit));
+                            const sumExps = exps.reduce((a, b) => a + b, 0);
+                            const probabilities = exps.map(val => val / sumExps);
+
+                            // Поиск индекса с максимальной вероятностью
                             let maxIdx = 0;
-                            let maxVal = output[0];
-                            for (let i = 1; i < output.length; i++) {
-                                if (output[i] > maxVal) {
-                                    maxVal = output[i];
+                            let maxProb = probabilities[0];
+                            for (let i = 1; i < probabilities.length; i++) {
+                                if (probabilities[i] > maxProb) {
+                                    maxProb = probabilities[i];
                                     maxIdx = i;
                                 }
                             }
@@ -249,8 +254,7 @@
                             document.getElementById('success-alert').style.display = 'block';
                             document.getElementById('pred-class').innerText = `${classes[maxIdx]} (${maxIdx})`;
                             
-                            // Оценка уверенности
-                            const confidence = Math.min(Math.max((Math.abs(maxVal) * 10 + 70), 50), 99.4).toFixed(1);
+                            const confidence = (maxProb * 100).toFixed(1);
                             document.getElementById('pred-conf').innerText = `↑ Уверенность: ${confidence}%`;
 
                         } catch (err) {
