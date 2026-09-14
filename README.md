@@ -4,4 +4,4 @@ python train.py --model plain
 # Обучение сфиральной модели (Sfiral-ResNet)
 python train.py --model resnet
 3. Генерация графиковДля создания визуализации кривых обучения запустите:Bashpython plot_results.py
- Ссылки и первоисточникиРепозиторий-каркас (Code Framework):Plain CNN vs. ResNet on CIFAR-10 (PyTorch reproduction) — [Ссылка на ваш GitHub-репозиторий]Научная статья-первоисточник (Base Paper):He, K., Zhang, X., Ren, S., & Sun, J. (2016). Deep Residual Learning for Image Recognition. CVPR. DOI: 10.1109/CVPR.2016.90Датасет:CIFAR-10: Krizhevsky, A. (2009). Learning Multiple Layers of Features from Tiny Images.📝 ЛицензияРаспространяется под MIT License.
+ Ссылки и первоисточникиРепозиторий-каркас (Code Framework):Plain CNN vs. ResNet on CIFAR-10 (PyTorch reproduction) — [Ссылка на ваш GitHub-репозиторий]Научная статья-первоисточник (Base Paper):He, K., Zhang, X., Ren, S., & Sun, J. (2016). Deep Residual Learning for Image Recognition. CVPR. DOI: 10.1109/CVPR.2016.90Датасет:CIFAR-10: Krizhevsky, A. (2009). Learning Multiple Layers of Features from Tiny Images. Лицензия Распространяется под MIT License.
