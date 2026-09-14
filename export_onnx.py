@@ -1,12 +1,12 @@
 import torch
 import torch.nn as nn
 import torchvision.models as models
+import os
 
-# 1. Создаем экземпляр модели (или ваш класс сфирального ResNet)
+# 1. Создаем модель и загружаем веса
 model = models.resnet18(weights=None)
-model.fc = nn.Linear(model.fc.in_features, 10) # 10 классов CIFAR-10
+model.fc = nn.Linear(model.fc.in_features, 10)
 
-# 2. Загружаем ваши обученные веса из папки checkpoints
 checkpoint_path = "checkpoints/resnet_best.pt"
 try:
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
@@ -14,30 +14,42 @@ try:
         model.load_state_dict(checkpoint["state_dict"])
     else:
         model.load_state_dict(checkpoint)
-    print("✅ Веса успешно загружены из checkpoints/resnet_best.pt!")
+    print("✅ Веса успешно загружены!")
 except Exception as e:
-    print(f"⚠️ Предупреждение при загрузке весов: {e}. Экспортируем структуру.")
+    print(f"⚠️ Ошибка загрузки весов: {e}")
 
 model.eval()
-
-# 3. Создаем тестовый тензор под размерность CIFAR-10 (батч 1, 3 канала, 32x32 пикселя)
 dummy_input = torch.randn(1, 3, 32, 32)
 
-# 4. Экспортируем модель в ОДИН единый файл model.onnx (без внешних .data файлов)
+# 2. Экспортируем (даже если PyTorch создаст .data файл)
 output_filename = "model.onnx"
 torch.onnx.export(
     model, 
     dummy_input, 
     output_filename,
-    export_params=True,        # Сохранять обученные веса внутрь файла
-    opset_version=12,          # Стабильная версия опесета для браузера
-    do_constant_folding=True,  # Оптимизация констант
+    export_params=True,
+    opset_version=12,
     input_names=['input'],
-    output_names=['output'],
-    dynamic_axes={
-        'input': {0: 'batch_size'}, 
-        'output': {0: 'batch_size'}
-    }
+    output_names=['output']
 )
 
-print(f"🎉 Успех! Модель успешно экспортирована в единый файл {output_filename} (без внешних зависимостей).")
+# 3. А теперь с помощью пакета onnx принудительно впекаем веса внутрь одного файла!
+try:
+    import onnx
+    from onnx.external_data_helper import load_external_data_for_model
+    
+    print("🔄 Объединяем внешние данные в единый файл model.onnx...")
+    onnx_model = onnx.load(output_filename, load_external_data=True)
+    # Сохраняем модель без разделения на внешние файлы
+    onnx.save(onnx_model, output_filename)
+    
+    # Удаляем образовавшийся хвост .data, если он остался
+    data_file = output_filename + ".data"
+    if os.path.exists(data_file):
+        os.remove(data_file)
+        
+    print("🎉 Успех! Создан абсолютно чистый единый файл model.onnx со всеми весами внутри.")
+except ImportError:
+    print("💡 Установите пакет onnx для авто-объединения: pip install onnx")
+except Exception as e:
+    print(f"ℹ️ Примечание к слиянию: {e}")
