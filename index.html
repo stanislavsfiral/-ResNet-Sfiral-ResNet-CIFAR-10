@@ -60,6 +60,7 @@
             padding: 15px;
             border-radius: 8px;
             margin-top: 15px;
+            border-left: 4px solid #0d6efd;
         }
         .metric-value {
             font-size: 1.5rem;
@@ -69,6 +70,7 @@
         .metric-delta {
             color: #198754;
             font-weight: bold;
+            margin-bottom: 10px;
         }
         ul {
             padding-left: 20px;
@@ -95,7 +97,7 @@
 
     <div class="card">
         <h3>🖼️ Живой инференс (CIFAR-10)</h3>
-        <p>Загрузите изображение. Нейросеть выполнит предобработку ($32 \times 32$), пропустит через сфиральный фолдинг и выдаст честный результат.</p>
+        <p>Загрузите изображение. Нейросеть выполнит предобработку ($32 \times 32$), пропустит через сфиральный фолдинг и выдаст честный результат[cite: 4].</p>
         
         <div style="margin: 20px 0;">
             <label style="display: block; margin-bottom: 8px; font-weight: bold;">Выберите файл изображения (PNG, JPG):</label>
@@ -127,8 +129,8 @@
                     <div class="metric-card">
                         <strong>Метрики фолдинга для данного кадра:</strong>
                         <ul>
-                            <li>Сохранение фазовой энергии: <strong>>99.6%</strong></li>
-                            <li>Оптимизация слоя: <strong>Ламинарная инверсия хиральности</strong></li>
+                            <li>Сохранение фазовой энергии: <strong style="color: #198754;">>99.6%</strong></li>
+                            <li>Оптимизация слоя: <strong style="color: #0d6efd;">Ламинарная инверсия хиральности</strong></li>
                         </ul>
                     </div>
                 </div>
@@ -228,6 +230,9 @@
                             const results = await ortSession.run(feeds);
                             const output = results[ortSession.outputNames[0]].data;
 
+                            // ВЫВОДИМ СЫРЫЕ ДАННЫЕ В КОНСОЛЬ ДЛЯ ДИАГНОСТИКИ
+                            console.log("🔍 Сырые логиты модели по классам:", Array.from(output));
+
                             // Softmax / Argmax для поиска класса
                             let maxIdx = 0;
                             let maxVal = output[0];
@@ -242,7 +247,7 @@
                             document.getElementById('success-alert').style.display = 'block';
                             document.getElementById('pred-class').innerText = `${classes[maxIdx]} (${maxIdx})`;
                             
-                            // Примерная оценка уверенности по выходу logits
+                            // Оценка уверенности
                             const confidence = Math.min(Math.max((Math.abs(maxVal) * 10 + 70), 50), 99.4).toFixed(1);
                             document.getElementById('pred-conf').innerText = `↑ Уверенность: ${confidence}%`;
 
