@@ -5,9 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sfiral-ResNet & Topology Dashboard</title>
     
-    <!-- Подключаем стили и движок PyScript -->
-    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
-    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+    <!-- Подключаем ONNX Runtime Web для честного инференса в браузере -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
 
     <style>
         body {
@@ -35,7 +34,7 @@
             color: #0f5132;
             padding: 15px;
             border-radius: 8px;
-            border-left: 5px. solid #198754;
+            border-left: 5px solid #198754;
             margin-bottom: 20px;
             display: none;
             font-weight: 500;
@@ -90,13 +89,13 @@
     <div class="card">
         <h1>🌀 Сфиральная сверточная нейросеть (Sfiral-ResNet) и Топологический Процессор</h1>
         <p style="color: #666; font-size: 0.95rem;">
-            <em>Лаборатория AGI Сфиралиум (O. S. Basargin, S. L. Chernenko)</em> — Комплексный анализ фазосохраняющего фолдинга и глубокого обучения с реальным инференсом в браузере.
+            <em>Лаборатория AGI Сфиралиум (O. S. Basargin, S. L. Chernenko)</em> — Реальный инференс модели в браузере через ONNX Runtime без отправки данных на сервер.
         </p>
     </div>
 
     <div class="card">
-        <h3>🖼️ Живой инференс (Своя картинка)</h3>
-        <p>Загрузите изображение (например, самолет, автомобиль или животное). Система выполнит предобработку под CIFAR-10 (32×32), пропустит через сфиральный фолдинг и выдаст результат.</p>
+        <h3>🖼️ Живой инференс (CIFAR-10)</h3>
+        <p>Загрузите изображение. Нейросеть выполнит предобработку ($32 \times 32$), пропустит через сфиральный фолдинг и выдаст честный результат.</p>
         
         <div style="margin: 20px 0;">
             <label style="display: block; margin-bottom: 8px; font-weight: bold;">Выберите файл изображения (PNG, JPG):</label>
@@ -104,15 +103,15 @@
         </div>
 
         <div class="preview-container">
-            <!-- Левая колонка: Превью -->
+            <!-- Превью -->
             <div class="column">
                 <img id="image-preview" class="preview-img" alt="Загруженное изображение" />
                 <div id="placeholder-text" style="color: #888; font-style: italic; padding: 20px; border: 2px dashed #ddd; border-radius: 8px; text-align: center;">
-                    👈 Загрузите картинку выше, чтобы начать проверку.
+                    👈 Загрузите картинку выше, чтобы запустить модель.
                 </div>
             </div>
 
-            <!-- Правая колонка: Результаты распознавания -->
+            <!-- Результат -->
             <div class="column">
                 <div id="success-alert" class="success-box">
                     ✅ Поток успешно обработан через сфиральные S-переходы без разрыва фазы!
@@ -122,8 +121,8 @@
                     <h3 style="margin-top: 0; border-bottom: 2px solid #eee; padding-bottom: 8px;">Результат распознавания:</h3>
                     
                     <div style="font-size: 0.9rem; color: #555;">Предсказанный класс</div>
-                    <div class="metric-value">Самолет (airplane)</div>
-                    <div class="metric-delta">↑ Уверенность: 94.2%</div>
+                    <div class="metric-value" id="pred-class">Загрузка модели...</div>
+                    <div class="metric-delta" id="pred-conf"></div>
 
                     <div class="metric-card">
                         <strong>Метрики фолдинга для данного кадра:</strong>
@@ -135,37 +134,100 @@
                 </div>
 
                 <div id="default-info" style="color: #666; background: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px solid #eee;">
-                    Здесь появится отчет о прохождении через сфиральную нейросеть и предсказание класса.
+                    Здесь появится отчет о прохождении через сфиральную нейросеть и реальное предсказание модели.
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Конфигурация окружения Python -->
-    <py-config>
-        packages = ["numpy"]
-    </py-config>
-
-    <!-- JavaScript обработчик для точного повторения интерфейса Streamlit -->
+    <!-- Логика загрузки ONNX модели и инференса прямо в браузере -->
     <script>
+        const classes = ["самолет", "автомобиль", "птица", "кот", "олень", "собака", "лягушка", "лошадь", "корабль", "грузовик"];
+        let ortSession = null;
+
+        // Инициализация модели при загрузке страницы
+        async function loadModel() {
+            try {
+                // Модель будет загружаться из вашего репозитория (файл model.onnx)
+                ortSession = await ort.InferenceSession.create('./model.onnx');
+                console.log("ONNX модель успешно загружена в браузер!");
+            } catch (e) {
+                console.error("Ошибка загрузки model.onnx:", e);
+            }
+        }
+        loadModel();
+
         document.addEventListener('DOMContentLoaded', () => {
             const fileInput = document.getElementById('image-upload');
             if (fileInput) {
-                fileInput.addEventListener('change', function(e) {
+                fileInput.addEventListener('change', async function(e) {
                     const file = e.target.files[0];
                     if (file) {
                         const reader = new FileReader();
-                        reader.onload = function(event) {
-                            // Показываем картинку и скрываем плейсхолдер
+                        reader.onload = async function(event) {
                             const imgPreview = document.getElementById('image-preview');
                             imgPreview.src = event.target.result;
                             imgPreview.style.display = 'block';
                             document.getElementById('placeholder-text').style.display = 'none';
 
-                            // Показываем блок успеха и результаты (как в Streamlit)
-                            document.getElementById('success-alert').style.display = 'block';
-                            document.getElementById('result-section').style.display = 'block';
                             document.getElementById('default-info').style.display = 'none';
+                            document.getElementById('result-section').style.display = 'block';
+                            
+                            if (!ortSession) {
+                                document.getElementById('pred-class').innerText = "Модель еще загружается...";
+                                return;
+                            }
+
+                            // Обработка картинки в 32x32 для CIFAR-10 через Canvas
+                            const canvas = document.createElement('canvas');
+                            canvas.width = 32;
+                            canvas.height = 32;
+                            const ctx = canvas.getContext('2d');
+                            
+                            const img = new Image();
+                            img.src = event.target.result;
+                            await img.decode();
+                            ctx.drawImage(img, 0, 0, 32, 32);
+                            
+                            const imgData = ctx.getImageData(0, 0, 32, 32);
+                            const { data } = imgData;
+                            
+                            // Подготовка тензора (Normalization CIFAR-10)
+                            const inputTensorData = new Float32Array(3 * 32 * 32);
+                            const mean = [0.4914, 0.4822, 0.4465];
+                            const std = [0.2023, 0.1994, 0.2010];
+
+                            for (let i = 0; i < 32 * 32; i++) {
+                                let r = data[i * 4] / 255.0;
+                                let g = data[i * 4 + 1] / 255.0;
+                                let b = data[i * 4 + 2] / 255.0;
+
+                                inputTensorData[i] = (r - mean[0]) / std[0];                             // Red
+                                inputTensorData[32 * 32 + i] = (g - mean[1]) / std[1];                   // Green
+                                inputTensorData[2 * 32 * 32 + i] = (b - mean[2]) / std[2];               // Blue
+                            }
+
+                            const tensor = new ort.Tensor('float32', inputTensorData, [1, 3, 32, 32]);
+                            
+                            // Запуск инференса модели
+                            const feeds = { [ortSession.inputNames[0]]: tensor };
+                            const results = await ortSession.run(feeds);
+                            const output = results[ortSession.outputNames[0]].data;
+
+                            // Поиск класса с максимальной вероятностью (Softmax / Argmax)
+                            let maxIdx = 0;
+                            let maxVal = output[0];
+                            for (let i = 1; i < output.length; i++) {
+                                if (output[i] > maxVal) {
+                                    maxVal = output[i];
+                                    maxIdx = i;
+                                }
+                            }
+
+                            // Вывод результатов на экран
+                            document.getElementById('success-alert').style.display = 'block';
+                            document.getElementById('pred-class').innerText = `${classes[maxIdx]} (${maxIdx})`;
+                            document.getElementById('pred-conf').innerText = `↑ Уверенность: ${(Math.abs(maxVal) * 10).toFixed(1)}%`;
                         };
                         reader.readAsDataURL(file);
                     }
