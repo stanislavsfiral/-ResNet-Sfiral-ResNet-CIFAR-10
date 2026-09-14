@@ -178,20 +178,22 @@
                         document.getElementById('default-info').style.display = 'none';
                         document.getElementById('result-section').style.display = 'block';
                         
-                        document.getElementById('pred-class').innerText = "Обработка и инференс...";
+                        document.getElementById('pred-class').innerText = "Загрузка модели из сети...";
                         document.getElementById('pred-conf').innerText = "";
 
-                        // Ждем, если модель еще грузится из интернета
+                        // Ждем загрузку модели (увеличенный таймаут до 60 секунд для файла 43 МБ)
                         let attempts = 0;
-                        while (!isModelLoaded && attempts < 30) {
+                        while (!isModelLoaded && attempts < 120) {
                             await new Promise(r => setTimeout(r, 500));
                             attempts++;
                         }
 
                         if (!isModelLoaded) {
-                            document.getElementById('pred-class').innerText = "Ошибка: модель не загрузилась";
+                            document.getElementById('pred-class').innerText = "Ошибка: таймаут загрузки модели (43 МБ)";
                             return;
                         }
+
+                        document.getElementById('pred-class').innerText = "Обработка и инференс...";
 
                         try {
                             // Обработка картинки в 32x32 для CIFAR-10 через Canvas
