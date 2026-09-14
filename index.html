@@ -91,7 +91,7 @@
     <div class="card">
         <h1>🌀 Сфиральная сверточная нейросеть (Sfiral-ResNet) и Топологический Процессор</h1>
         <p style="color: #666; font-size: 0.95rem;">
-            <em>Лаборатория AGI Сфиралиум (O. S. Basargin, S. L. Chernenko)</em> — Реальный инференс модели в браузере через ONNX Runtime без отправки данных на сервер.
+            <em>Лаборатория AGI Сфиралиум (O. S. Basargin, S. L. Chernenko)</em> — Реальный инференс модели в браузере через ONNX Runtime без отправки данных на сервер[cite: 4].
         </p>
     </div>
 
@@ -181,7 +181,7 @@
                         document.getElementById('pred-class').innerText = "Загрузка модели из сети...";
                         document.getElementById('pred-conf').innerText = "";
 
-                        // Ждем загрузку модели (увеличенный таймаут до 60 секунд для файла 43 МБ)
+                        // Ждем загрузку модели (увеличенный таймаут до 60 секунд)
                         let attempts = 0;
                         while (!isModelLoaded && attempts < 120) {
                             await new Promise(r => setTimeout(r, 500));
@@ -189,14 +189,14 @@
                         }
 
                         if (!isModelLoaded) {
-                            document.getElementById('pred-class').innerText = "Ошибка: таймаут загрузки модели (43 МБ)";
+                            document.getElementById('pred-class').innerText = "Ошибка: таймаут загрузки модели";
                             return;
                         }
 
                         document.getElementById('pred-class').innerText = "Обработка и инференс...";
 
                         try {
-                            // Обработка картинки в 32x32 для CIFAR-10 через Canvas
+                            // Обработка картинки в 32x32 с сохранением пропорций (Center Crop)
                             const canvas = document.createElement('canvas');
                             canvas.width = 32;
                             canvas.height = 32;
@@ -205,7 +205,14 @@
                             const img = new Image();
                             img.src = event.target.result;
                             await img.decode();
-                            ctx.drawImage(img, 0, 0, 32, 32);
+                            
+                            // Вычисляем размеры квадратного кропа по центру
+                            const size = Math.min(img.width, img.height);
+                            const offsetX = (img.width - size) / 2;
+                            const offsetY = (img.height - size) / 2;
+
+                            ctx.clearRect(0, 0, 32, 32);
+                            ctx.drawImage(img, offsetX, offsetY, size, size, 0, 0, 32, 32);
                             
                             const imgData = ctx.getImageData(0, 0, 32, 32);
                             const { data } = imgData;
@@ -234,13 +241,12 @@
 
                             console.log("🔍 Сырые логиты модели по классам:", Array.from(output));
 
-                            // Точный расчет Softmax (как в PyTorch) для получения вероятностей
+                            // Точный расчет Softmax (как в PyTorch)
                             const maxLogit = Math.max(...output);
                             const exps = Array.from(output).map(val => Math.exp(val - maxLogit));
                             const sumExps = exps.reduce((a, b) => a + b, 0);
                             const probabilities = exps.map(val => val / sumExps);
 
-                            // Поиск индекса с максимальной вероятностью
                             let maxIdx = 0;
                             let maxProb = probabilities[0];
                             for (let i = 1; i < probabilities.length; i++) {
