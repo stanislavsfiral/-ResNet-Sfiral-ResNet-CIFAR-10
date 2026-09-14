@@ -1,55 +1,70 @@
-import torch
-import torch.nn as nn
-import torchvision.models as models
 import os
+import glob
+import torch
+from models.resnet import resnet_cifar
+from config import cfg
 
-# 1. Создаем модель и загружаем веса
-model = models.resnet18(weights=None)
-model.fc = nn.Linear(model.fc.in_features, 10)
+def export():
+    print("🔄 Ищем последний чекпоинт в папке checkpoints...")
+    ckpt_files = glob.glob("checkpoints/resnet_*.pt")
+    
+    if not ckpt_files:
+        raise FileNotFoundError("⚠️ В папке checkpoints не найдены файлы весов (resnet_*.pt).")
+    
+    ckpt_path = sorted(ckpt_files)[-1]
+    print(f"📥 Загружаем веса из: {ckpt_path}")
 
-checkpoint_path = "checkpoints/resnet_best.pt"
-try:
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
-    if isinstance(checkpoint, dict) and "state_dict" in checkpoint:
-        model.load_state_dict(checkpoint["state_dict"])
+    # Создаем модель в точности как при обучении
+    model = resnet_cifar(cfg.n_blocks_per_stage, cfg.stage_channels, cfg.num_classes)
+    
+    checkpoint = torch.load(ckpt_path, map_location="cpu")
+    
+    # Извлекаем state_dict с учетом ключа "model_state" из utils.py
+    if isinstance(checkpoint, dict):
+        if "model_state" in checkpoint:
+            state_dict = checkpoint["model_state"]
+        elif "state_dict" in checkpoint:
+            state_dict = checkpoint["state_dict"]
+        elif "model_state_dict" in checkpoint:
+            state_dict = checkpoint["model_state_dict"]
+        else:
+            state_dict = checkpoint
     else:
-        model.load_state_dict(checkpoint)
-    print("✅ Веса успешно загружены!")
-except Exception as e:
-    print(f"⚠️ Ошибка загрузки весов: {e}")
+        state_dict = checkpoint
 
-model.eval()
-dummy_input = torch.randn(1, 3, 32, 32)
+    # Убираем префикс 'module.', если модель обучалась в DataParallel
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        name = k[7:] if k.startswith("module.") else k
+        new_state_dict[name] = v
 
-# 2. Экспортируем (даже если PyTorch создаст .data файл)
-output_filename = "model.onnx"
-torch.onnx.export(
-    model, 
-    dummy_input, 
-    output_filename,
-    export_params=True,
-    opset_version=12,
-    input_names=['input'],
-    output_names=['output']
-)
+    model.load_state_dict(new_state_dict, strict=True)
+    model.eval()
 
-# 3. А теперь с помощью пакета onnx принудительно впекаем веса внутрь одного файла!
-try:
-    import onnx
-    from onnx.external_data_helper import load_external_data_for_model
+    # Создаем тестовый тензор под размерность CIFAR-10 (1, 3, 32, 32)
+    dummy_input = torch.randn(1, 3, 32, 32)
     
-    print("🔄 Объединяем внешние данные в единый файл model.onnx...")
-    onnx_model = onnx.load(output_filename, load_external_data=True)
-    # Сохраняем модель без разделения на внешние файлы
-    onnx.save(onnx_model, output_filename)
+    onnx_path = "model.onnx"
+    print(f"🔄 Экспортируем в {onnx_path}...")
     
-    # Удаляем образовавшийся хвост .data, если он остался
-    data_file = output_filename + ".data"
-    if os.path.exists(data_file):
-        os.remove(data_file)
-        
-    print("🎉 Успех! Создан абсолютно чистый единый файл model.onnx со всеми весами внутри.")
-except ImportError:
-    print("💡 Установите пакет onnx для авто-объединения: pip install onnx")
-except Exception as e:
-    print(f"ℹ️ Примечание к слиянию: {e}")
+    # Экспорт с гарантированной упаковкой весов внутрь единого файла
+    export_kwargs = {
+        "export_params": True,
+        "opset_version": 12,
+        "do_constant_folding": True,
+        "input_names": ['input'],
+        "output_names": ['output'],
+        "dynamic_axes": {'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}}
+    }
+    
+    try:
+        # Пробуем передать параметр подавления внешних данных, если поддерживается
+        torch.onnx.export(model, dummy_input, onnx_path, external_data=False, **export_kwargs)
+    except TypeError:
+        # Фолбек для стандартного вызова
+        torch.onnx.export(model, dummy_input, onnx_path, **export_kwargs)
+
+    print(f"🎉 Успех! Актуальные веса из {os.path.basename(ckpt_path)} успешно зашиты в единый {onnx_path}!")
+
+if __name__ == "__main__":
+    export()

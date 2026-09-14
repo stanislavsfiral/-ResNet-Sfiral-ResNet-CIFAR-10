@@ -6,6 +6,11 @@ import torchvision.transforms as transforms
 from PIL import Image
 import math
 import os
+import glob
+
+# Импортируем архитектуру сфиральной сети из вашего проекта
+from models.resnet import resnet_cifar
+from config import cfg
 
 # Настройка страницы
 st.set_page_config(
@@ -62,11 +67,10 @@ if mode == "📊 Обучение и Инференс Sfiral-ResNet (CIFAR-10)":
         if uploaded_file is not None:
             image = Image.open(uploaded_file).convert("RGB")
             with col_img1:
-                # ИСПРАВЛЕНО: use_container_width вместо устаревшего use_column_width
-                st.image(image, caption="Загруженное изображение", use_container_width=True)
+                st.image(image, caption="Загруженное изображение", width='stretch')
                 
             with col_img2:
-                st.info("🔄 Выполняется топологическая обработка и прогон через веса...")
+                st.info("🔄 Выполняется топологическая обработка и реальный прогон через веса...")
                 
                 # Пайплайн предобработки CIFAR-10
                 transform = transforms.Compose([
@@ -78,20 +82,57 @@ if mode == "📊 Обучение и Инференс Sfiral-ResNet (CIFAR-10)":
                 
                 cifar_classes = ("самолет", "автомобиль", "птица", "кот", "олень", "собака", "лягушка", "лошадь", "корабль", "грузовик")
                 
-                # Проверка наличия чекпоинта
-                ckpt_path = "checkpoints/resnet_best.pt"
-                if os.path.exists(ckpt_path):
-                    try:
-                        # Здесь при наличии весов подключается реальный инференс модели:
-                        # model.load_state_dict(torch.load(ckpt_path, map_location="cpu"))
-                        pass
-                    except Exception:
-                        pass
+                # Поиск чекпоинтов в папке checkpoints
+                ckpt_files = glob.glob("checkpoints/resnet_*.pt")
                 
-                # Результат работы сфирального процессора
-                st.success("✅ Поток успешно обработан через сфиральные S-переходы без разрыва фазы!")
-                st.markdown("### Результат распознавания:")
-                st.metric("Предсказанный класс", "Самолет (airplane)", "Уверенность: 94.2%")
+                if ckpt_files:
+                    ckpt_path = sorted(ckpt_files)[-1]
+                    try:
+                        # Инициализируем модель через фабрику из проекта
+                        model = resnet_cifar(cfg.n_blocks_per_stage, cfg.stage_channels, cfg.num_classes)
+                        
+                        checkpoint = torch.load(ckpt_path, map_location="cpu")
+                        
+                        # Безопасно извлекаем state_dict с учетом ключа "model_state" из utils.py
+                        if isinstance(checkpoint, dict):
+                            if "model_state" in checkpoint:
+                                state_dict = checkpoint["model_state"]
+                            elif "state_dict" in checkpoint:
+                                state_dict = checkpoint["state_dict"]
+                            elif "model_state_dict" in checkpoint:
+                                state_dict = checkpoint["model_state_dict"]
+                            else:
+                                state_dict = checkpoint
+                        else:
+                            state_dict = checkpoint
+
+                        # Убираем префикс 'module.', если модель сохранялась через DataParallel
+                        new_state_dict = {}
+                        for k, v in state_dict.items():
+                            name = k[7:] if k.startswith("module.") else k
+                            new_state_dict[name] = v
+
+                        model.load_state_dict(new_state_dict, strict=True)
+                        model.eval()
+
+                        with torch.no_grad():
+                            outputs = model(input_tensor)
+                            probabilities = torch.nn.functional.softmax(outputs, dim=1)
+                            confidence, predicted = torch.max(probabilities, 1)
+                            idx = predicted.item()
+                            conf_val = confidence.item() * 100
+
+                        pred_name = cifar_classes[idx]
+
+                        st.success(f"✅ Инференс успешно выполнен (веса: {os.path.basename(ckpt_path)})!")
+                        st.markdown("### Результат распознавания:")
+                        st.metric("Предсказанный класс", f"{pred_name} ({idx})", f"Уверенность: {conf_val:.1f}%")
+                        
+                    except Exception as e:
+                        st.error(f"Ошибка при инференсе модели: {e}")
+                else:
+                    st.warning("⚠️ В папке checkpoints не найдены файлы весов (resnet_*.pt).")
+
                 st.markdown("**Метрики фолдинга для данного кадра:**")
                 st.markdown("- Сохранение фазовой энергии: **>99.6%**")
                 st.markdown("- Оптимизация слоя: **Ламинарная инверсия хиральности**")
